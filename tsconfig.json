@@ -3,12 +3,16 @@
     "target": "es6",
     "rootDir": ".",
     "outDir": "dist",
-    "module": "ES6",
-    "sourceMap": false,
+    "module": "commonjs",
+    "sourceMap": true,
+    "moduleResolution": "node",
     "esModuleInterop": true,
+    "resolveJsonModule": false,
     "experimentalDecorators": true,
     "declaration": true,
-    "lib": [ "es6" ]
+    "lib": [ "es6" ],
+    "types": ["node"],
+    "strict": true
   },
   "include": ["./**/*.ts"],
   "exclude": ["node_modules", "dist"]

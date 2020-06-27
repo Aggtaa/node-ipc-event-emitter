@@ -1,12 +1,14 @@
-import { isNullOrUndefined } from 'util';
+import { isNullOrUndefined, isUndefined } from 'util';
 
-import { IpcEventEmitterOptions, EventEmitter } from './base';
+import { Options, AbstractInstance, Message } from './base';
+import { Socket } from 'net';
 
-export class Server extends EventEmitter {
+export class Server extends AbstractInstance {
 
-    private sockets = new Map<string, unknown>();
+    private sockets = new Map<string, Socket>();
+    private stickyTopics = new Map<string, unknown>();
 
-    constructor(options?: IpcEventEmitterOptions) {
+    constructor(options?: Partial<Options>) {
         super('server', options);
     }
 
@@ -14,11 +16,11 @@ export class Server extends EventEmitter {
 
         return new Promise((res, rej) => {
             try {
-                this.ipc.serve(this.options.socketPath, () => {
+                this.ipc.serve(this.options.socketPath || '', () => {
 
                     this.ee.emit('open');
 
-                    this.ipc.server.on('message', (data, socket) => {
+                    this.ipc.server.on('message', (data: Message, socket: Socket) => {
                         if (data &&
                             !isNullOrUndefined(data.message) &&
                             !isNullOrUndefined(data.sender) &&
@@ -29,11 +31,12 @@ export class Server extends EventEmitter {
                                 this.sockets.set(data.sender, socket);
                                 this.log(`client ${data.sender} connected`);
                                 this.ee.emit('client.connect', data.sender);
+                                this.emitStickyTopics(data.sender);
                             }
                             else {
-                                this.ee.emit('message', data.message, data.sender, data.recipient);
+                                this.ee.emit('message', data.topic, data.message, data.sender, data.recipient);
                                 if (data.recipient === '$all')
-                                    this.emitFrom(data.message, data.sender);
+                                    this.emit(data.message, data.topic, data.sticky, data.sender);
                             }
                         }
                     });
@@ -41,9 +44,16 @@ export class Server extends EventEmitter {
                         this.log('unknown client connected');
                         this.ee.emit('client.connect.raw');
                     });
-                    this.ipc.server.on('socket.disconnected', (socket, id) => {
-                        this.log(`client ${id} disconnected`);
-                        this.ee.emit('client.disconnect', id);
+                    this.ipc.server.on('socket.disconnected', (socket: Socket) => {
+                        const idAndSocket = Array.from(this.sockets.entries()).find(([, s]) => s === socket);
+                        if (isUndefined(idAndSocket)) {
+                            this.log(`unknown client disconnected. this is an error situation`);
+                            this.ee.emit('client.disconnect', undefined);
+                        }
+                        else {
+                            this.log(`client ${idAndSocket[0]} disconnected`);
+                            this.ee.emit('client.disconnect', idAndSocket[0]);
+                        }
                     });
 
                     this.ipc.server.on('destroy', () => {
@@ -61,30 +71,43 @@ export class Server extends EventEmitter {
         });
     }
 
-    private emitFrom(message: unknown, sender: string): this {
-        this.log(`re-emitting ${message} from ${sender}`);
-        this.ipc.server['broadcast']('message', { message, sender, recipient: '$all' });
+    stop(): void {
+        this.ipc.server.stop();
+    }
+
+    emit(message: unknown, topic?: string, sticky: boolean = false, onBehalfOf: string = this.id): this {
+        if (onBehalfOf !== this.id)
+            this.log(`re-emitting ${JSON.stringify(message)} to topic "${topic}"` + (sticky ? ' (sticky)' : '') + ` from ${onBehalfOf}`);
+        else
+            this.log(`emitting ${JSON.stringify(message)} to topic "${topic}"` + (sticky ? ' (sticky)' : ''));
+        if (!isUndefined(topic)) {
+            if (sticky)
+                this.stickyTopics.set(topic, message)
+            if (isUndefined(message))
+                this.stickyTopics.delete(topic);
+        }
+        this.ipc.server['broadcast']('message', { topic, message, sender: onBehalfOf, recipient: '$all' });
         return this;
     }
 
-    emit(message: unknown): this {
-        this.log(`emitting ${message}`);
-        this.ipc.server['broadcast']('message', { message, sender: this.id, recipient: '$all' });
-        return this;
-    }
-
-    emitTo(recipient: string, message: unknown): this {
+    emitTo(recipient: string, message: unknown, topic?: string): this {
         if (recipient === this.id) {
-            this.log(`emitting ${message} to self`);
+            this.log(`emitting ${JSON.stringify(message)} to self`);
             this.ee.emit('message', message);
         }
-
         else {
-            this.log(`emitting ${message} to ${recipient}`);
+            this.log(`emitting ${JSON.stringify(message)} to ${recipient}`);
             const recipientSocket = this.sockets.get(recipient);
-            this.ipc.server.emit(recipientSocket, 'message', { message, sender: this.id, recipient });
+            if (!isUndefined(recipientSocket))
+                this.ipc.server.emit(recipientSocket, 'message', { topic, message, sender: this.id, recipient });
         }
         return this;
+    }
+
+    private emitStickyTopics(to: string) {
+        new Map(this.stickyTopics).forEach((message, topic) => 
+            this.emitTo(to, message, topic)
+        );
     }
 
 }
