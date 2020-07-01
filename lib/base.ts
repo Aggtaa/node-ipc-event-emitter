@@ -2,10 +2,13 @@ import { EventEmitter as EE } from 'events';
 import nodeIpc from 'node-ipc';
 import { Socket } from 'net';
 
+export type LoggerCallback = (message: string) => void;
+
 export interface Options {
     socketPath: string;
     retry: number;
     silent: boolean;
+    logger: LoggerCallback;
 }
 
 export interface Instance {
@@ -67,39 +70,47 @@ export interface NodeIPC {
     of: { server: NodeIPCClient },
 }
 
-export abstract class AbstractInstance implements Instance {
+export abstract class AbstractInstance<TOptions extends Options> implements Instance {
 
         readonly id: string;
 
-        readonly options: Options;
+        readonly options: TOptions;
         protected ipc: NodeIPC;
         protected ee: EE = new EE();
 
-        constructor(id: string, options?: Partial<Options>) {
+        constructor(id: string, options?: Partial<TOptions>) {
 
             this.id = id;
 
-            this.options = Object.freeze({
-                socketPath: '/var/run/node-ipc-event-emitter',
-                retry: 1500,
-                silent: true,
+            this.options = {
+                ...{
+                    socketPath: '/var/run/node-ipc-event-emitter',
+                    retry: 1500,
+                    silent: true,
+                    logger: this.defaultLogger,
+                } as TOptions,
 
-                ...(options || {}),
-            });
+                ...(options || {})
+            };
 
             this.ipc = new nodeIpc.IPC() as unknown as NodeIPC;
             this.ipc.config.id = process.pid.toString();
             this.ipc.config.retry = this.options.retry;
             this.ipc.config.rawBuffer = false;
             this.ipc.config.silent = false;
-            this.ipc.config.logger = this.nodeIpcLogger;
+            this.ipc.config.logger = this.log;
             this.ipc.config.logInColor = false;
             this.ipc.config.logDepth = 0;
             // this.ipc.config.maxRetries = false;
         }
 
-        private nodeIpcLogger(msg: string): void {
-            // this.log(msg);
+        private defaultLogger = (message: string): void => {
+            console.log(`IPC ${this.id}: ${message}`);
+        }
+
+        log = (message: string): void => {
+            if (!this.options.silent && this.options.logger)
+                this.options.logger(message);
         }
 
         abstract start(): Promise<void>;
@@ -122,10 +133,5 @@ export abstract class AbstractInstance implements Instance {
         abstract emitTo(recipientId: string, message: unknown): this;
 
         abstract stop(): void;
-
-        log(message: string): void {
-            if (!this.options.silent)
-                console.log(`IPC ${this.id}: ${message}`);
-        }
 
 }

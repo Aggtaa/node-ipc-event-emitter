@@ -3,9 +3,13 @@ import crypro from 'crypto';
 
 import { Options, AbstractInstance, Message } from './base';
 
-export class Client extends AbstractInstance {
+export interface ClientOptions {
+    receiveBroadcastsFromSelf: boolean
+}
 
-    constructor(id?: string, options?: Partial<Options>) {
+export class Client extends AbstractInstance<Options & ClientOptions> {
+
+    constructor(id?: string, options?: Partial<Options & ClientOptions>) {
         if (isNullOrUndefined(id))
             id = crypro.randomBytes(4).toString('hex');
 
@@ -32,7 +36,7 @@ export class Client extends AbstractInstance {
                             !isNullOrUndefined(data.recipient)
                     ) {
                         this.log(`message from server: ${JSON.stringify(data.message)}`);
-                        if (data.sender !== this.id)
+                        if (data.sender !== this.id || this.options.receiveBroadcastsFromSelf)
                             if (data.recipient === this.id || data.recipient === '$all')
                                 this.ee.emit('message', data.topic, data.message, data.sender);
                             else

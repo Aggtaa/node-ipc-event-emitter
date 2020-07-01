@@ -1,6 +1,6 @@
 {
     "name": "node-ipc-event-emitter",
-    "version": "0.1.11",
+    "version": "0.1.17",
     "description": "Inter-process and inter-computer event emitter that supports TCP, UDP and Unix sockets",
     "main": "./dist/lib/index.js",
     "types": "./dist/lib/index.d.ts",

@@ -3,7 +3,7 @@ import { isNullOrUndefined, isUndefined } from 'util';
 import { Options, AbstractInstance, Message } from './base';
 import { Socket } from 'net';
 
-export class Server extends AbstractInstance {
+export class Server extends AbstractInstance<Options> {
 
     private sockets = new Map<string, Socket>();
     private stickyTopics = new Map<string, unknown>();
