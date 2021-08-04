@@ -35,7 +35,7 @@ export class Client extends AbstractInstance<Options & ClientOptions> {
                             !isNullOrUndefined(data.sender) &&
                             !isNullOrUndefined(data.recipient)
                     ) {
-                        this.log(`message from server: ${JSON.stringify(data.message)}`);
+                        this.log(`message from server: ${JSON.stringify(data.topic)} ${JSON.stringify(data.message)}`);
                         if (data.sender !== this.id || this.options.receiveBroadcastsFromSelf)
                             if (data.recipient === this.id || data.recipient === '$all')
                                 this.ee.emit('message', data.topic, data.message, data.sender);

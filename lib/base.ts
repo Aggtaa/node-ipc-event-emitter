@@ -1,14 +1,16 @@
 import { EventEmitter as EE } from 'events';
 import nodeIpc from 'node-ipc';
 import { Socket } from 'net';
+import { isUndefined } from 'util';
 
 export type LoggerCallback = (message: string) => void;
 
 export interface Options {
     socketPath: string;
     retry: number;
-    silent: boolean;
+    verbose: boolean;
     logger: LoggerCallback;
+    maxListeners: number;
 }
 
 export interface Instance {
@@ -86,18 +88,22 @@ export abstract class AbstractInstance<TOptions extends Options> implements Inst
                 ...{
                     socketPath: '/var/run/node-ipc-event-emitter',
                     retry: 1500,
-                    silent: true,
+                    verbose: false,
                     logger: this.defaultLogger,
+                    maxListeners: 0,
                 } as TOptions,
 
                 ...(options || {})
             };
 
+            if (!isUndefined(this.options.maxListeners))
+                this.ee.setMaxListeners(this.options.maxListeners);
+    
             this.ipc = new nodeIpc.IPC() as unknown as NodeIPC;
             this.ipc.config.id = process.pid.toString();
             this.ipc.config.retry = this.options.retry;
             this.ipc.config.rawBuffer = false;
-            this.ipc.config.silent = false;
+            this.ipc.config.silent = !this.options.verbose;
             this.ipc.config.logger = this.log;
             this.ipc.config.logInColor = false;
             this.ipc.config.logDepth = 0;
@@ -109,7 +115,7 @@ export abstract class AbstractInstance<TOptions extends Options> implements Inst
         }
 
         log = (message: string): void => {
-            if (!this.options.silent && this.options.logger)
+            if (this.options.logger)
                 this.options.logger(message);
         }
 
