@@ -87,13 +87,16 @@ export class Server extends AbstractInstance<Options> {
                 this.stickyTopics.delete(topic);
         }
         this.ipc.server['broadcast']('message', { topic, message, sender: onBehalfOf, recipient: '$all' });
+        if (onBehalfOf === this.id) {
+            this.ee.emit('message', topic, message, this.id, '$all');
+        }
         return this;
     }
 
     emitTo(recipient: string, message: unknown, topic?: string): this {
         if (recipient === this.id) {
             this.log(`emitting ${JSON.stringify(message)} to self`);
-            this.ee.emit('message', message);
+            this.ee.emit('message', topic, message, this.id, this.id);
         }
         else {
             this.log(`emitting ${JSON.stringify(message)} to ${recipient}`);
